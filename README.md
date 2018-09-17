@@ -2,6 +2,11 @@
 
 `step` is a library that lets you spec state-tranisition steps.
 
+## Example
+
+See the TodoMVC example from [Re-frame](https://github.com/Day8/re-frame/)
+spec'd with `step`: https://github.com/colinkahn/todomvc-step
+
 ## Install
 
 ### deps.edn
@@ -94,7 +99,7 @@ In the example above the system defines a state modeling a cup of water with a
 single key `:v` (volume) whose value can be 0-10.
 
 We then have two actions - `::drink` and `::fill`, which are
-[re-frame](https://github.com/Day8/re-frame/) style
+[Re-frame](https://github.com/Day8/re-frame/) style
 tuples containing a keyword as the intent of the action.
 
 Next we define the state variation specs. It's important to note that we are
