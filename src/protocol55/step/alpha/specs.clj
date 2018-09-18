@@ -18,7 +18,9 @@
 (s/def ::extra-defs (s/and (s/coll-of keyword?)
                            #(even? (count %))))
 
-(s/def ::stepdef-opts (s/keys :opt-un [::extra-defs]))
+(s/def ::data-def symbol?)
+
+(s/def ::stepdef-opts (s/keys :opt-un [::extra-defs ::data-def]))
 
 (s/def ::stepdef-args
   (s/cat :k keyword? :opts (s/? ::stepdef-opts)
