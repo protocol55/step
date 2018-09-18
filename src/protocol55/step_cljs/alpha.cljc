@@ -3,6 +3,16 @@
   #?(:cljs
      (:require-macros [protocol55.step-cljs.alpha :refer [stepdef]])))
 
+(defn- mapify-forms
+  [forms]
+  (->> forms
+       (reduce (fn [m [state & {:as action->states'}]]
+                 (assoc m state
+                        (into {} (map (juxt (comp first)
+                                            (comp set second)))
+                              action->states')))
+               {})))
+
 #?(:clj
    (do
 
@@ -45,8 +55,11 @@
 
   where all keywords are registered specs.
 
-  Optionally, the second argument can be a map of options that excepts a single
-  key, :extra-defs, which is a vector of bindings of key => step restrict key.
+  Optionally, the second argument can be a map of options that accepts the
+  keys :extra-defs and :data-def, detailed below.
+
+  :extra-defs - A vector of bindings of key => step restriction key.
+
   This outputs the extra defs as specs with the specified restriction.
 
   Restriction keys are as follows:
@@ -70,14 +83,41 @@
       ::drink (:in-between/state)))
 
   will define ::step, ::state-action, ::states, and ::action specs.
+
+  :data-def - A symbol that will define a map representation of forms.
+
+  For example:
+
+  (stepdef ::step
+    {:data-def step-data}
+    (:in-between/state
+      ::drink (:in-between/state :empty/state)
+      ::fill  (:in-between/state :full/state))
+    (:empty/state
+      ::fill (:in-between/state))
+    (:full/state
+      ::drink (:in-between/state)))
+
+  will define both the ::step spec and
+
+  (def step-data
+    {:in-between/state
+     {::drink #{:in-between/state :empty/state}
+      ::fill #{:in-between/state :full/state}}
+     :empty/state
+     {::fill #{:in-between/state}}
+     :full/state
+     {::drink #{:in-between/state}}})
   "
   [k & forms]
   (let [[opts forms] (if (map? (first forms))
                        [(first forms) (rest forms)]
                        [nil forms])
-        {:keys [extra-defs]} opts
+        {:keys [extra-defs data-def]} opts
         bindings (concat [k :step] extra-defs)]
     `(do
+       ~(when data-def
+          `(def ~data-def ~(mapify-forms forms)))
        ~@(map (fn [[k restrict]]
                 `(s/def ~k ~(step* forms :restrict restrict)))
               (partition 2 bindings)))))

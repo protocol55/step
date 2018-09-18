@@ -1,6 +1,6 @@
 # protocol55.step.alpha
 
-`step` is a library that lets you spec state-tranisition steps.
+`step` is a library that lets you spec state-transition steps.
 
 ## Example
 
@@ -11,11 +11,11 @@ spec'd with `step`: https://github.com/colinkahn/todomvc-step
 
 ### deps.edn
 
-`org.clojars.protocol55/step {:mvn/version "0.1.0"}`
+`org.clojars.protocol55/step {:mvn/version "0.2.0"}`
 
 ### Leinigen
 
-`[org.clojars.protocol55/step "0.1.0"]`
+`[org.clojars.protocol55/step "0.2.0"]`
 
 ## Namespaces
 
@@ -23,51 +23,6 @@ Namespaces are split between Clojure and ClojureScript:
 
 - Clojure: `protocol55.step.alpha`, `protocol55.step.alpha.specs`
 - ClojureScript: `protocol55.step-cljs.alpha`, `protocol55.step-cljs.alpha.specs`
-
-## Usage
-
-### `protocol55.step.alpha/stepdef`
-
-```
-[k & forms]
-Macro
-  Defines a spec that validates a step as-per the transitions
-  specified in forms. A step is a tuple of [state action state'].
-
-  Forms are of the shape:
-
-  (:in-between/state
-    ::drink (:in-between/state :empty/state)
-    ::fill  (:in-between/state :full/state))
-
-  where all keywords are registered specs.
-
-  Optionally, the second argument can be a map of options that excepts a single
-  key, :extra-defs, which is a vector of bindings of key => step restrict key.
-  This outputs the extra defs as specs with the specified restriction.
-
-  Restriction keys are as follows:
-
-  :no-state'   - [state action]
-  :only-states - [state state']
-  :only-action - [action]
-
-  For example:
-
-  (stepdef ::step
-    {:extra-defs [::state-action :no-state'
-                  ::states       :only-states
-                  ::action       :only-action]}
-    (:in-between/state
-      ::drink (:in-between/state :empty/state)
-      ::fill  (:in-between/state :full/state))
-    (:empty/state
-      ::fill (:in-between/state))
-    (:full/state
-      ::drink (:in-between/state)))
-
-  will define ::step, ::state-action, ::states, and ::action specs.
-```
 
 ## Walkthrough
 
@@ -162,11 +117,15 @@ Exercising gives us results conforming to our step spec:
  [[{:v 8} [:fill] {:v 10}] [:in-between [:fill [:full [{:v 8} [:fill] {:v 10}]]]]])
 ```
 
-### Extra defs
+### Options
 
 `stepdef` accepts an optional map of options as its second argument. It allows
-one key, `:extra-defs`, which can be used to create multiple specs with
-additional restrictions on the kinds of steps produced.
+two keys: `:extra-defs` and `:data-def`.
+
+#### Extra defs
+
+`:extra-defs` can be used to create multiple specs with additional restrictions
+on the kinds of steps produced.
 
 ```clojure
 (stepdef ::step
@@ -184,7 +143,7 @@ additional restrictions on the kinds of steps produced.
 
 Restriction keys are as follows:
 
-- `no-state'` - `[state action]`
+- `:no-state'` - `[state action]`
 - `:only-states` - `[state state']`
 - `:only-action` - `[action]`
 
@@ -222,4 +181,140 @@ fully validate against our full `::step` spec:
     (let [step (conj (vec (s/unform ::state-action args) (s/unform ::state ret)))]
       (s/valid? ::step step)))
   :ret ::state)
+```
+
+### Data def
+
+`:data-def` can be used to assign a data representation of the `forms` in
+`stepdef` to a variable.
+
+```clojure
+(stepdef ::step
+  {:data-def step-data}
+  (:in-between/state
+    ::drink (:in-between/state :empty/state)
+    ::fill  (:in-between/state :full/state))
+  (:empty/state
+    ::fill (:in-between/state))
+  (:full/state
+    ::drink (:in-between/state)))
+```
+
+The above will define both the `::step` spec definition as well as
+
+```clojure
+(def step-data
+  {:in-between/state
+   {::drink #{:in-between/state :empty/state}
+    ::fill #{:in-between/state :full/state}}
+   :empty/state
+   {::fill #{:in-between/state}}
+   :full/state
+   {::drink #{:in-between/state}}})
+```
+
+One use for this data is to generate state transition graphs. We'll use the
+[fsmvis](https://github.com/jebberjeb/fsmviz) library.
+
+Assume we have the `stepdef` above defined in a namespace
+`protocol55.step.example`. We can define a file to generate our graph like so:
+
+```clojure
+(require '[fsmviz.core :as fsmviz])
+(require '[protocol55.step.example :refer [step-data]])
+
+(def transitions
+  (mapcat
+    (fn [[state m]]
+      (mapcat
+        (fn [[action states']]
+          (map #(mapv keyword %&)
+               (repeat (namespace state))
+               (repeat (name action))
+               (map namespace states')))
+        m))
+    step-data))
+
+(fsmviz/generate-image transitions "example-graph")
+```
+
+This outputs the following svg<sup>*</sup>:
+
+![test-graph](https://user-images.githubusercontent.com/1444385/45701123-3c04d800-bb23-11e8-885d-05c946aa80b2.png)
+
+<sup>*</sup> This is not the _exact_ svg. `fsmviz` defines an initial state of
+`nil` which produces an unconnected black dot when using our transitions. I've
+edited it out in the image above.
+
+## Usage
+
+### `protocol55.step.alpha/stepdef`
+
+```
+[k & forms]
+Macro
+  Defines a spec that validates a step as-per the transitions
+  specified in forms. A step is a tuple of [state action state'].
+
+  Forms are of the shape:
+
+  (:in-between/state
+    ::drink (:in-between/state :empty/state)
+    ::fill  (:in-between/state :full/state))
+
+  where all keywords are registered specs.
+
+  Optionally, the second argument can be a map of options that accepts the
+  keys :extra-defs and :data-def, detailed below.
+
+  :extra-defs - A vector of bindings of key => step restriction key.
+
+  This outputs the extra defs as specs with the specified restriction.
+
+  Restriction keys are as follows:
+
+  :no-state'   - [state action]
+  :only-states - [state state']
+  :only-action - [action]
+
+  For example:
+
+  (stepdef ::step
+    {:extra-defs [::state-action :no-state'
+                  ::states       :only-states
+                  ::action       :only-action]}
+    (:in-between/state
+      ::drink (:in-between/state :empty/state)
+      ::fill  (:in-between/state :full/state))
+    (:empty/state
+      ::fill (:in-between/state))
+    (:full/state
+      ::drink (:in-between/state)))
+
+  will define ::step, ::state-action, ::states, and ::action specs.
+
+  :data-def - A symbol that will define a map representation of forms.
+
+  For example:
+
+  (stepdef ::step
+    {:data-def step-data}
+    (:in-between/state
+      ::drink (:in-between/state :empty/state)
+      ::fill  (:in-between/state :full/state))
+    (:empty/state
+      ::fill (:in-between/state))
+    (:full/state
+      ::drink (:in-between/state)))
+
+  will define both the ::step spec and
+
+  (def step-data
+    {:in-between/state
+     {::drink #{:in-between/state :empty/state}
+      ::fill #{:in-between/state :full/state}}
+     :empty/state
+     {::fill #{:in-between/state}}
+     :full/state
+     {::drink #{:in-between/state}}})
 ```
