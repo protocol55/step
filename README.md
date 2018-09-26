@@ -59,7 +59,7 @@ tuples containing a keyword as the intent of the action.
 
 Next we define the state variation specs. It's important to note that we are
 using the same names with different qualifiers here. Because of limitations of
-the `keys` spec this will only work `:opt-un` and `:req-un`.
+the `keys` spec this will only work with `:opt-un` and `:req-un`.
 
 With those in place we'll define our step spec:
 
