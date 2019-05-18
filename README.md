@@ -24,6 +24,8 @@ Namespaces are split between Clojure and ClojureScript:
 - Clojure: `protocol55.step.alpha`, `protocol55.step.alpha.specs`
 - ClojureScript: `protocol55.step-cljs.alpha`, `protocol55.step-cljs.alpha.specs`
 
+Only one namespace is provided for `protocol55.step.state.alpha`.
+
 ## Walkthrough
 
 A step is defined as a tuple of:
@@ -37,17 +39,17 @@ We use `protocol55.step.alpha/stepdef` to define a step spec.
 We'll begin by defining the state and action specs for our system:
 
 ```clojure
+(require '[protocol55.step.state.alpha :as state])
+
 (s/def ::drink (s/tuple #{:drink}))
 (s/def ::fill (s/tuple #{:fill}))
 
-(s/def :in-between/v (s/int-in 1 10))
-(s/def :in-between/state (s/keys :req-un [:in-between/v]))
+(s/def ::v (state/cases :empty zero? :in-between (s/int-in 1 10) :full #{10}))
+(s/def ::state (s/keys :req [::v]))
 
-(s/def :empty/v #{0})
-(s/def :empty/state (s/keys :req-un [:empty/v]))
-
-(s/def :full/v #{10})
-(s/def :full/state (s/keys :req-un [:full/v]))
+(s/def ::in-between-state (state/produce ::state :of {::v :in-between}))
+(s/def ::empty-state (state/produce ::state :of {::v :empty}))
+(s/def ::full-state (state/produce ::state :of {::v :full}))
 ```
 
 In the example above the system defines a state modeling a cup of water with a
@@ -57,21 +59,21 @@ We then have two actions - `::drink` and `::fill`, which are
 [Re-frame](https://github.com/Day8/re-frame/) style
 tuples containing a keyword as the intent of the action.
 
-Next we define the state variation specs. It's important to note that we are
-using the same names with different qualifiers here. Because of limitations of
-the `keys` spec this will only work with `:opt-un` and `:req-un`.
+Next we define the state variation specs. We use the helpers found in
+`protocol55.step.state.alpha` to define cases for our specs and then produce
+state specs which references those cases.
 
 With those in place we'll define our step spec:
 
 ```clojure
 (stepdef ::step
- (:in-between/state
-  ::drink (:in-between/state :empty/state)
-  ::fill  (:in-between/state :full/state))
- (:empty/state
-  ::fill (:in-between/state))
- (:full/state
-  ::drink (:in-between/state)))
+  (::in-between-state
+    ::drink (::in-between-state ::empty-state)
+    ::fill  (::in-between-state ::full-state))
+  (::empty-state
+    ::fill (::in-between-state))
+  (::full-state
+    ::drink (::in-between-state)))
 ```
 
 Each form within `stepdef` is defined as:
@@ -87,34 +89,21 @@ The ability to define multiple next-states (state') for an action lets us model
 more complex systems than a normal state machine `state -> action -> state'`
 tuple would.
 
-Conformance for steps looks like the following:
-
-```clojure
-(s/conform ::step [{:v 1} [:drink] {:v 0}])
-;; => [:in-between [:drink [:empty [{:v 1} [:drink] {:v 0}]]]]
-```
-
-where:
-
-```clojure
-[state-qualifier [action-name [state'-qualifier step-tuple]]]
-```
-
 Exercising gives us results conforming to our step spec:
 
 ```clojure
 (s/exercise ::step)
 
-([[{:v 0} [:fill] {:v 2}] [:empty [:fill [:in-between [{:v 0} [:fill] {:v 2}]]]]]
- [[{:v 1} [:drink] {:v 2}] [:in-between [:drink [:in-between [{:v 1} [:drink] {:v 2}]]]]]
- [[{:v 10} [:drink] {:v 1}] [:full [:drink [:in-between [{:v 10} [:drink] {:v 1}]]]]]
- [[{:v 10} [:drink] {:v 2}] [:full [:drink [:in-between [{:v 10} [:drink] {:v 2}]]]]]
- [[{:v 0} [:fill] {:v 3}] [:empty [:fill [:in-between [{:v 0} [:fill] {:v 3}]]]]]
- [[{:v 10} [:drink] {:v 1}] [:full [:drink [:in-between [{:v 10} [:drink] {:v 1}]]]]]
- [[{:v 10} [:drink] {:v 5}] [:full [:drink [:in-between [{:v 10} [:drink] {:v 5}]]]]]
- [[{:v 4} [:drink] {:v 0}] [:in-between [:drink [:empty [{:v 4} [:drink] {:v 0}]]]]]
- [[{:v 10} [:drink] {:v 8}] [:full [:drink [:in-between [{:v 10} [:drink] {:v 8}]]]]]
- [[{:v 8} [:fill] {:v 10}] [:in-between [:fill [:full [{:v 8} [:fill] {:v 10}]]]]])
+([[{::v 0} [:fill] {::v 2}] [:empty [:fill [:in-between [{::v 0} [:fill] {::v 2}]]]]]
+ [[{::v 1} [:drink] {::v 2}] [:in-between [:drink [:in-between [{::v 1} [:drink] {::v 2}]]]]]
+ [[{::v 10} [:drink] {::v 1}] [:full [:drink [:in-between [{::v 10} [:drink] {::v 1}]]]]]
+ [[{::v 10} [:drink] {::v 2}] [:full [:drink [:in-between [{::v 10} [:drink] {::v 2}]]]]]
+ [[{::v 0} [:fill] {::v 3}] [:empty [:fill [:in-between [{::v 0} [:fill] {::v 3}]]]]]
+ [[{::v 10} [:drink] {::v 1}] [:full [:drink [:in-between [{::v 10} [:drink] {::v 1}]]]]]
+ [[{::v 10} [:drink] {::v 5}] [:full [:drink [:in-between [{::v 10} [:drink] {::v 5}]]]]]
+ [[{::v 4} [:drink] {::v 0}] [:in-between [:drink [:empty [{::v 4} [:drink] {::v 0}]]]]]
+ [[{::v 10} [:drink] {::v 8}] [:full [:drink [:in-between [{::v 10} [:drink] {::v 8}]]]]]
+ [[{::v 8} [:fill] {::v 10}] [:in-between [:fill [:full [{::v 8} [:fill] {::v 10}]]]]])
 ```
 
 ### Options
@@ -132,13 +121,13 @@ on the kinds of steps produced.
   {:extra-defs [::state-action :no-state'
                 ::states       :only-states
                 ::action       :only-action]}
-  (:in-between/state
-    ::drink (:in-between/state :empty/state)
-    ::fill  (:in-between/state :full/state))
-  (:empty/state
-    ::fill (:in-between/state))
-  (:full/state
-    ::drink (:in-between/state)))
+  (::in-between-state
+    ::drink (::in-between-state ::empty-state)
+    ::fill  (::in-between-state ::full-state))
+  (::empty-state
+    ::fill (::in-between-state))
+  (::full-state
+    ::drink (::in-between-state)))
 ```
 
 Restriction keys are as follows:
@@ -157,14 +146,10 @@ function.
 ```clojure
 (s/def ::action (s/or :drink ::drink :fill ::fill))
 
-(s/def ::state (s/or :in-between :in-between/state
-                     :empty :empty/state
-                     :full :full/state))
-
 (defn next-state [state action]
   (case (first action)
-    :drink (update state :v dec)
-    :fill (update state :v inc)))
+    :drink (update state ::v dec)
+    :fill (update state ::v inc)))
 
 (s/fdef next-state
   :args ::state-action
@@ -191,26 +176,28 @@ fully validate against our full `::step` spec:
 ```clojure
 (stepdef ::step
   {:data-def step-data}
-  (:in-between/state
-    ::drink (:in-between/state :empty/state)
-    ::fill  (:in-between/state :full/state))
-  (:empty/state
-    ::fill (:in-between/state))
-  (:full/state
-    ::drink (:in-between/state)))
+  (::in-between-state
+    ::drink (::in-between-state ::empty-state)
+    ::fill  (::in-between-state ::full-state))
+  (::empty-state
+    ::fill (::in-between-state))
+  (::full-state
+    ::drink (::in-between-state)))
 ```
 
 The above will define both the `::step` spec definition as well as
 
 ```clojure
 (def step-data
-  {:in-between/state
-   {::drink #{:in-between/state :empty/state}
-    ::fill #{:in-between/state :full/state}}
-   :empty/state
-   {::fill #{:in-between/state}}
-   :full/state
-   {::drink #{:in-between/state}}})
+  {::in-between-state
+    {::drink #{::in-between-state ::empty-state}
+     ::fill #{::in-between-state ::full-state}}
+
+    ::empty-state
+    {::fill #{::in-between-state}}
+
+    ::full-state
+    {::drink #{::in-between-state}}})
 ```
 
 One use for this data is to generate state transition graphs. We'll use the
@@ -258,9 +245,9 @@ Macro
 
   Forms are of the shape:
 
-  (:in-between/state
-    ::drink (:in-between/state :empty/state)
-    ::fill  (:in-between/state :full/state))
+  (::in-between-state
+    ::drink (::in-between-state ::empty-state)
+    ::fill  (::in-between-state ::full-state))
 
   where all keywords are registered specs.
 
@@ -283,13 +270,13 @@ Macro
     {:extra-defs [::state-action :no-state'
                   ::states       :only-states
                   ::action       :only-action]}
-    (:in-between/state
-      ::drink (:in-between/state :empty/state)
-      ::fill  (:in-between/state :full/state))
-    (:empty/state
-      ::fill (:in-between/state))
-    (:full/state
-      ::drink (:in-between/state)))
+    (::in-between-state
+      ::drink (::in-between-state ::empty-state)
+      ::fill  (::in-between-state ::full-state))
+    (::empty-state
+      ::fill (::in-between-state))
+    (::full-state
+      ::drink (::in-between-state)))
 
   will define ::step, ::state-action, ::states, and ::action specs.
 
@@ -299,22 +286,45 @@ Macro
 
   (stepdef ::step
     {:data-def step-data}
-    (:in-between/state
-      ::drink (:in-between/state :empty/state)
-      ::fill  (:in-between/state :full/state))
-    (:empty/state
-      ::fill (:in-between/state))
-    (:full/state
-      ::drink (:in-between/state)))
+    (::in-between-state
+      ::drink (::in-between-state ::empty-state)
+      ::fill  (::in-between-state ::full-state))
+    (::empty-state
+      ::fill (::in-between-state))
+    (::full-state
+      ::drink (::in-between-state)))
 
   will define both the ::step spec and
 
   (def step-data
-    {:in-between/state
-     {::drink #{:in-between/state :empty/state}
-      ::fill #{:in-between/state :full/state}}
-     :empty/state
-     {::fill #{:in-between/state}}
-     :full/state
-     {::drink #{:in-between/state}}})
+    {::in-between-state
+      {::drink #{::in-between-state ::empty-state}
+       ::fill #{::in-between-state ::full-state}}
+  
+      ::empty-state
+      {::fill #{::in-between-state}}
+  
+      ::full-state
+      {::drink #{::in-between-state}}})
+```
+
+### `protocol55.step.state.alpha/cases`
+
+```
+([& key-pred-forms])
+Macro
+  Creates a spec similar to clojure.spec.alpha/or which is compatible with
+  protocol55.step.state.alpha/produce.
+
+  (state/cases :true true? :false false?)
+```
+
+### `protocol55.step.state.alpha/produce`
+
+```
+([spec & {:keys [of of-un]}])
+  Creates and returns a map validating spec for specific cases of its keys. :of
+  and :of-un are both maps of namespace-qualified keywords to case keywords.
+
+  (state/produce ::state :of {::v :empty})
 ```

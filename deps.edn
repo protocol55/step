@@ -9,7 +9,7 @@
                                            :sha "5fb4fc46ad0bf2e0ce45eba5b9117a2e89166479"}}
    :main-opts ["-m" "cognitect.test-runner"]}
 
-  :testcljs
+  :test-cljs
   {:extra-paths ["test"]
    :extra-deps {org.clojure/clojurescript {:mvn/version "1.10.145"}
                 olical/cljs-test-runner  {:mvn/version "2.1.0"}}

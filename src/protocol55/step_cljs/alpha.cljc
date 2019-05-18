@@ -20,16 +20,16 @@
   [forms & {:keys [restrict]}]
   `(s/or ~@(mapcat
              (fn [[state & {:as action->states'}]]
-               (let [state-qualifier (namespace state)]
-                 `(~(keyword state-qualifier)
+               (let [state-qualifier state]
+                 `(~state-qualifier
                   (s/or ~@(mapcat
                           (fn [[action states']]
-                            `(~(-> action name keyword)
+                            `(~action
                               (s/or
                                 ~@(mapcat
                                     (fn [state']
-                                      (let [state'-qualifier (namespace state')]
-                                        `(~(keyword state'-qualifier)
+                                      (let [state'-qualifier state']
+                                        `(~state'-qualifier
                                           ~(case restrict
                                              :no-state'
                                              `(s/tuple ~state ~action)
@@ -49,9 +49,9 @@
 
   Forms are of the shape:
 
-  (:in-between/state
-    ::drink (:in-between/state :empty/state)
-    ::fill  (:in-between/state :full/state))
+  (::in-between-state
+    ::drink (::in-between-state ::empty-state)
+    ::fill  (::in-between-state ::full-state))
 
   where all keywords are registered specs.
 
@@ -74,13 +74,13 @@
     {:extra-defs [::state-action :no-state'
                   ::states       :only-states
                   ::action       :only-action]}
-    (:in-between/state
-      ::drink (:in-between/state :empty/state)
-      ::fill  (:in-between/state :full/state))
-    (:empty/state
-      ::fill (:in-between/state))
-    (:full/state
-      ::drink (:in-between/state)))
+    (::in-between-state
+      ::drink (::in-between-state ::empty-state)
+      ::fill  (::in-between-state ::full-state))
+    (::empty-state
+      ::fill (::in-between-state))
+    (::full-state
+      ::drink (::in-between-state)))
 
   will define ::step, ::state-action, ::states, and ::action specs.
 
@@ -90,25 +90,27 @@
 
   (stepdef ::step
     {:data-def step-data}
-    (:in-between/state
-      ::drink (:in-between/state :empty/state)
-      ::fill  (:in-between/state :full/state))
-    (:empty/state
-      ::fill (:in-between/state))
-    (:full/state
-      ::drink (:in-between/state)))
+    (::in-between-state
+      ::drink (::in-between-state ::empty-state)
+      ::fill  (::in-between-state ::full-state))
+    (::empty-state
+      ::fill (::in-between-state))
+    (::full-state
+      ::drink (::in-between-state)))
 
   will define both the ::step spec and
 
   (def step-data
-    {:in-between/state
-     {::drink #{:in-between/state :empty/state}
-      ::fill #{:in-between/state :full/state}}
-     :empty/state
-     {::fill #{:in-between/state}}
-     :full/state
-     {::drink #{:in-between/state}}})
-  "
+    {::in-between-state
+      {::drink #{::in-between-state ::empty-state}
+       ::fill #{::in-between-state ::full-state}}
+  
+      ::empty-state
+      {::fill #{::in-between-state}}
+  
+      ::full-state
+      {::drink #{::in-between-state}}})
+ "
   [k & forms]
   (let [[opts forms] (if (map? (first forms))
                        [(first forms) (rest forms)]

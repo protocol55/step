@@ -15,16 +15,16 @@
   [forms & {:keys [restrict]}]
   `(s/or ~@(mapcat
              (fn [[state & {:as action->states'}]]
-               (let [state-qualifier (namespace state)]
-                 `(~(keyword state-qualifier)
+               (let [state-qualifier state]
+                 `(~state-qualifier
                   (s/or ~@(mapcat
                           (fn [[action states']]
-                            `(~(-> action name keyword)
+                            `(~action
                               (s/or
                                 ~@(mapcat
                                     (fn [state']
-                                      (let [state'-qualifier (namespace state')]
-                                        `(~(keyword state'-qualifier)
+                                      (let [state'-qualifier state']
+                                        `(~state'-qualifier
                                           ~(case restrict
                                              :no-state'
                                              `(s/tuple ~state ~action)
